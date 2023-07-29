@@ -92,20 +92,21 @@ def main():
             if 'remote="aosp"' not in line and (path, name) not in tracked_repos:
                 local_manifest_lines.append(f'  <remove-project name="{path}" />\n')
                 local_manifest_lines.append(line)
-                if 'remote="' not in line:
-                    local_manifest_lines[-1] = local_manifest_lines[-1].rstrip() + ' remote="default1" />\n'
 
         elif '<default' in line:
             if line not in old_manifest_lines:
                 # The <default> remote in the new manifest is different, rename it to <default1>
-                local_manifest_lines.append(line.replace('<default', '<default1'))
+                default_remote_y = line.replace('<default', '<default1')
+                local_manifest_lines.append(default_remote_y)
         else:
             local_manifest_lines.append(line)
 
         if '<remote ' in line:
             remote_name = get_remote_name(line)
             if not remote_exists(remote_name, old_manifest_lines):
-                extra_remotes.add(line)
+                start_index = new_manifest_lines.index(line)
+                end_index = find_remote_block_end(new_manifest_lines, start_index)
+                extra_remotes.update(new_manifest_lines[start_index:end_index + 1])
 
     local_manifest_lines = remove_comments(local_manifest_lines)
     local_manifest_lines = clean_stray_elements(local_manifest_lines)
@@ -116,32 +117,6 @@ def main():
     # Remove the superproject and contactinfo lines
     local_manifest_lines = [line for line in local_manifest_lines if not line.strip().startswith('<superproject')]
     local_manifest_lines = [line for line in local_manifest_lines if not line.strip().startswith('<contactinfo')]
-
-    # Check if <default> is the same in both manifests
-    default_block_present = False
-    for line in new_manifest_lines:
-        if line.strip() == '</default>':
-            default_block_present = True
-            break
-
-    if not default_block_present:
-        local_manifest_lines = [line for line in local_manifest_lines if not line.strip().startswith('<default')]
-    remove_remote_block = False
-    for line in new_manifest_lines:
-        if remove_remote_block and '</remote>' in line:
-            remove_remote_block = False
-            continue
-
-        if remove_remote_block:
-            continue
-
-        if '<remote ' in line:
-            remote_name = get_remote_name(line)
-            if not remote_exists(remote_name, old_manifest_lines):
-                start_index = new_manifest_lines.index(line)
-                end_index = find_remote_block_end(new_manifest_lines, start_index)
-                extra_remotes.update(new_manifest_lines[start_index:end_index + 1])
-                remove_remote_block = True
 
     local_manifest_file = "local_manifest.xml"  # Replace with the desired name for the output local manifest file
     write_manifest(local_manifest_file, local_manifest_lines)
